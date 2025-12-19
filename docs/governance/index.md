@@ -1,3 +1,9 @@
+---
+title: Governance
+nav_order: 4
+has_children: true
+---
+
 # Governance
 
 ## Status
