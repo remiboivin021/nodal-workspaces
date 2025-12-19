@@ -1,6 +1,6 @@
 ---
 title: Continuous Integration
-nav_order: 3
+nav_order: 8
 parent: Tooling
 ---
 

@@ -1,7 +1,7 @@
 ---
-title: System Architecture Overview
-nav_order: 1
-parent: Governance
+title: Risk Acceptance
+nav_order: 3
+parent: Hazard Management
 ---
 
 # Risk Acceptance

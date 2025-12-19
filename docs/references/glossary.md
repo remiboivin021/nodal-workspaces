@@ -1,7 +1,7 @@
 ---
-title: System Architecture Overview
-nav_order: 1
-parent: Governance
+title: Glossary
+nav_order: 3
+parent: references
 ---
 
 # Glossary

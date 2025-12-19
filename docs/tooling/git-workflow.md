@@ -1,3 +1,9 @@
+---
+title: Git Workflow
+nav_order: 2
+parent: Tooling
+---
+
 # Git Workflow
 
 This document defines how Git is used within the Nodalworkspace.

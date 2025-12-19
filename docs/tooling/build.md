@@ -1,3 +1,9 @@
+---
+title: Build Tooling
+nav_order: 4
+parent: Tooling
+---
+
 # Build Tooling
 
 This document defines the requirements for build systems used in all NODAL repositories.

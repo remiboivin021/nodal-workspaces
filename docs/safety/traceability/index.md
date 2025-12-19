@@ -1,7 +1,8 @@
 ---
 title: Traceability
 nav_order: 5
-parent: Safety Case
+parent: Safety
+has_children: true
 ---
 
 # Traceability

@@ -1,7 +1,7 @@
 ---
-title: System Architecture Overview
-nav_order: 1
-parent: Governance
+title: Development Phase — Safety Activities
+nav_order: 2
+parent: Safety Lifecycle
 ---
 
 # Development Phase — Safety Activities

@@ -1,5 +1,5 @@
 ---
-title: System Architecture Overview
-nav_order: 1
-parent: Governance
+title: Standards
+nav_order: 2
+parent: References
 ---

@@ -1,7 +1,7 @@
 ---
-title: System Architecture Overview
-nav_order: 1
-parent: Governance
+title: Risk Classification
+nav_order: 2
+parent: Hazard Management
 ---
 
 # Risk Classification

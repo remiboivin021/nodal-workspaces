@@ -1,7 +1,7 @@
 ---
 title: Safety Requirements
 nav_order: 3
-parent: Safety Case
+parent: Safety
 ---
 
 # Safety Requirements

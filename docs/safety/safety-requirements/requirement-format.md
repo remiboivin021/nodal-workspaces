@@ -1,7 +1,7 @@
 ---
-title: System Architecture Overview
+title: Safety Requirement Format
 nav_order: 1
-parent: Governance
+parent: Safety Requirements
 ---
 
 # Safety Requirement Format

@@ -1,3 +1,9 @@
+---
+title: Tooling & Safety Evidence
+nav_order: 4
+parent: Tooling
+---
+
 # Tooling and Safety Evidence
 
 This document defines how engineering tooling produces valid safety evidence.

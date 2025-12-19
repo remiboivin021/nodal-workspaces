@@ -1,7 +1,7 @@
 ---
-title: System Architecture Overview
+title: Abbreviations & Acronyms
 nav_order: 1
-parent: Governance
+parent: References
 ---
 
 # Abbreviations & Acronyms

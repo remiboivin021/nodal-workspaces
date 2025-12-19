@@ -1,7 +1,7 @@
 ---
-title: System Architecture Overview
+title: Verification Phase — Safety Activities
 nav_order: 1
-parent: Governance
+parent: Safety Lifecycle
 ---
 
 # Verification Phase — Safety Activities

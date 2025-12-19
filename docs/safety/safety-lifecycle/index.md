@@ -1,7 +1,8 @@
 ---
-title: System Architecture Overview
+title: Safety Lifecycle
 nav_order: 1
-parent: Governance
+parent: Safety
+has_children: true
 ---
 
 # Safety Lifecycle

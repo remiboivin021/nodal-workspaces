@@ -1,3 +1,9 @@
+---
+title: Simulation Tooling
+nav_order: 5
+parent: Tooling
+---
+
 # Simulation Tooling
 
 This document defines how simulation is used within the NODAL ecosystem.

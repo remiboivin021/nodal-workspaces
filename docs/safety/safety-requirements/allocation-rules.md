@@ -1,7 +1,7 @@
 ---
-title: System Architecture Overview
+title: Safety Requirement Allocation Rules
 nav_order: 1
-parent: Governance
+parent: Safety Requirements
 ---
 
 # Safety Requirement Allocation Rules
