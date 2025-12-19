@@ -1,7 +1,7 @@
 name: Docs Navigation Check
 
 on:
-  push:
+  pull_request:
     paths:
       - "docs/**/*.md"
 
