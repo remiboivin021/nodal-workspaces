@@ -2,7 +2,7 @@
 
 title: Modularity Principles
 nav_order: 4
-parent: Architecture
+parent: architecture
 --------------------
 
 # Modularity Principles

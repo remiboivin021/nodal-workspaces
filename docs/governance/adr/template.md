@@ -1,5 +1,7 @@
 ---
 title: ADR-XXXX – <Decision Title>
+parent: adr
+nav_exclude: true
 ---
 
 # ADR-XXXX – <Decision Title>
