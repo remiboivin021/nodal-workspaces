@@ -6,7 +6,6 @@ parent: Architecture
 permalink: /architecture/timing-budget/
 ---
 
-
 # Timing Budget & Determinism Policy
 
 ## Status
