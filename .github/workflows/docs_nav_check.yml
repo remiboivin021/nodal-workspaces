@@ -1,8 +1,7 @@
 name: Docs Navigation Check
 
 on:
-  pull_request:
-    types: [opened, reopened]
+  push:
     paths:
       - "docs/**/*.md"
 
@@ -58,3 +57,7 @@ jobs:
 
           print("✅ Navigation structure OK")
           EOF
+
+      - name: Validate documentation navigation
+        run: |
+          python3 tools/doc-graph/generate_doc_graph.py
