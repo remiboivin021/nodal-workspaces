@@ -1,6 +1,7 @@
 ---
 title: System Documentation
 nav_order: 1
+permalink: /
 ---
 
 # Nodal Robotics – System Documentation
