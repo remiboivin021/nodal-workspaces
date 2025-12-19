@@ -117,7 +117,6 @@ This allocation is used for safety and compliance reasoning.
 
 ---
 
-
 ## 7. Impact on Safety Scope
 
 The system boundary directly defines:
