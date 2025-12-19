@@ -3,6 +3,7 @@
 title: System Boundaries
 nav_order: 2
 parent: Architecture
+permalink: /architecture/system-boundaries/
 ---
 
 # System Boundaries
@@ -115,6 +116,7 @@ Responsibilities are allocated as follows:
 This allocation is used for safety and compliance reasoning.
 
 ---
+
 
 ## 7. Impact on Safety Scope
 

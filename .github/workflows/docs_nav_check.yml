@@ -1,0 +1,124 @@
+name: Docs Navigation Check
+
+on:
+  push:
+    paths:
+      - "docs/**/*.md"
+      - '!docs/NAVIGATION.md'
+jobs:
+  nav-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Nécessaire pour commit
+      pull-requests: write  # Nécessaire pour commenter sur les PRs
+ 
+    steps:
+      - uses: actions/checkout@v4
+
+      # - name: Check nav_order and parent consistency
+      #   run: |
+      #     python3 << 'EOF'
+      #     import os, re, sys
+
+      #     titles = {}
+      #     errors = []
+
+      #     def parse_frontmatter(path):
+      #         with open(path) as f:
+      #             content = f.read()
+      #         if not content.startswith('---'):
+      #             return {}
+      #         fm = content.split('---')[1]
+      #         data = {}
+      #         for line in fm.splitlines():
+      #             if ':' in line:
+      #                 k, v = line.split(':', 1)
+      #                 data[k.strip()] = v.strip()
+      #         return data
+
+      #     for root, _, files in os.walk("docs"):
+      #         for file in files:
+      #             if file.endswith(".md"):
+      #                 path = os.path.join(root, file)
+      #                 fm = parse_frontmatter(path)
+      #                 if 'title' in fm:
+      #                     titles[fm['title']] = path
+
+      #     for title, path in titles.items():
+      #         fm = parse_frontmatter(path)
+      #         parent = fm.get('parent')
+      #         if parent and parent not in titles:
+      #             errors.append(f"{path}: parent '{parent}' not found")
+
+      #         if parent and 'nav_order' not in fm:
+      #             errors.append(f"{path}: missing nav_order")
+
+      #     if errors:
+      #         print("❌ Navigation errors found:")
+      #         for e in errors:
+      #             print(" -", e)
+      #         sys.exit(1)
+
+      #     print("✅ Navigation structure OK")
+      #     EOF
+
+      - name: Validate documentation navigation
+        run: |
+          python3 scripts/doc-graph/generate_doc_graph.py
+        continue-on-error: true
+ 
+      - name: Check if navigation file changed
+        id: check_changes
+        run: |
+          git add docs/NAVIGATION.md
+          if git diff --cached --quiet; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Commit and push changes (on push to main)
+        if: github.event_name == 'push' && steps.check_changes.outputs.changed == 'true' && steps.validate.outcome == 'success'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add docs/NAVIGATION.md
+          git commit -m "chore: update documentation navigation tree [skip ci]"
+          git push
+      
+      - name: Commit changes to PR branch
+        if: github.event_name == 'pull_request' && steps.check_changes.outputs.changed == 'true' && steps.validate.outcome == 'success'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add docs/NAVIGATION.md
+          git commit -m "chore: update documentation navigation tree"
+          git push origin HEAD:${{ github.head_ref }}
+      
+      - name: Comment on PR with success
+        if: github.event_name == 'pull_request' && steps.validate.outcome == 'success' && steps.check_changes.outputs.changed == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '✅ Documentation navigation validated and `docs/NAVIGATION.md` updated automatically.'
+            })
+      
+      - name: Comment on PR with failure
+        if: github.event_name == 'pull_request' && steps.validate.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ Documentation navigation validation failed. Please check the workflow logs for details and fix the issues before merging.'
+            })
+      
+      - name: Fail the workflow if validation failed
+        if: steps.validate.outcome == 'failure'
+        run: exit 1
