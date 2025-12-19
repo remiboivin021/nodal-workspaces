@@ -1,6 +1,6 @@
 ---
 title: Safety Requirement Allocation Rules
-nav_order: 1
+nav_order: 3
 parent: Safety Requirements
 ---
 
