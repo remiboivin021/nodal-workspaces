@@ -29,7 +29,6 @@ def main(input_file: str):
     comments = payload["comments"]
     meta = payload["meta"]
 
-    # Chargement de l'état existant ou création d'un nouveau
     try:
         state = load_state(STATE_FILE)
     except FileNotFoundError:
@@ -80,26 +79,21 @@ def main(input_file: str):
             state["state"]["approved_by"] = c["author"]
             state["state"]["approved_at"] = c["created_at"]
 
-        elif action == "reject":
-            state["state"]["status"] = AdrStatus.REJECTED.value
-            state["state"]["rejected_by"] = c["author"]
-            state["state"]["rejected_at"] = c["created_at"]
-
     save_state(state, STATE_FILE)
 
-    # Si l'ADR est approuvé, générer le fichier final
-    if state["state"]["status"] == AdrStatus.APPROVED.value:
-        with open("adr_template.md", "r") as f:
-            template = f.read()
+    if state["state"]["status"] != AdrStatus.APPROVED.value:
+        return
 
-        body = inject_sections(template, state)
-        filename = adr_filename_from_state(state)
+    with open("adr_template.md", "r") as f:
+        template = f.read()
 
-        # Écriture du fichier ADR
-        with open(f"docs/adr/{filename}", "w") as f:
-            f.write(body)
+    body = inject_sections(template, state)
+    filename = adr_filename_from_state(state)
 
-        print(f"ADR_FILE=docs/adr/{filename}")
+    with open(filename, "w") as f:
+        f.write(body)
+
+    print(f"ADR_FILE={filename}")
 
 if __name__ == "__main__":
     main(sys.argv[1])
