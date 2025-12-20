@@ -1,5 +1,6 @@
 import json
 import sys
+from datetime import datetime
 from adr_commands import REQUIRED_SECTIONS, is_maintainer, AdrStatus
 from adr_parser import parse_comment
 from adr_state import create_empty_state, load_state, save_state
@@ -8,11 +9,20 @@ from adr_template import inject_sections
 STATE_FILE = "adr_state.json"
 
 def adr_filename_from_state(state: dict) -> str:
-    ts = state["state"]["approved_at"]
-    dt = ts.replace("-", "").replace(":", "").replace("T", "-")[:15]
-    return f"ADR-{dt}.md"
+    """
+    Génère un nom de fichier ADR unique basé sur le timestamp d'approbation.
+    Format: ADR-YYYYMMDD-HHMMSS.md
+    """
+    approved_at = state["state"].get("approved_at")
+    if approved_at:
+        dt = datetime.fromisoformat(approved_at.replace("Z", "+00:00"))
+    else:
+        dt = datetime.utcnow()
+    ts_str = dt.strftime("%Y%m%d-%H%M%S")
+    return f"ADR-{ts_str}.md"
 
 def main(input_file: str):
+    # Lecture des commentaires JSON générés par le GitHub Action
     with open(input_file, "r") as f:
         payload = json.load(f)
 
@@ -57,7 +67,7 @@ def main(input_file: str):
         elif action == "approve":
             # Vérifie que l'ADR n'est pas vide
             non_empty = [s for s, v in state["sections"].items() if v["content"].strip()]
-            if not non_empty:
+            if non_empty:
                 raise RuntimeError("Cannot approve ADR: all sections are empty")
 
             # Vérifie que les sections obligatoires sont présentes
