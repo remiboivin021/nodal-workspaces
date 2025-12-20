@@ -68,8 +68,9 @@ def main(input_file: str):
         elif action == "approve":
             # Vérifie que l'ADR n'est pas vide
             non_empty = [s for s, v in state["sections"].items() if v["content"].strip()]
-            print(f"non_empty: {} value")
+            print(f"empty value: {non_empty} test")
             if not non_empty:
+                print(f"value: {non_empty} test")
                 raise RuntimeError("Cannot approve ADR: all sections are empty")
 
             # Vérifie que les sections obligatoires sont présentes
@@ -85,7 +86,6 @@ def main(input_file: str):
             state["state"]["status"] = AdrStatus.REJECTED.value
             state["state"]["rejected_by"] = c["author"]
             state["state"]["rejected_at"] = c["created_at"]
-
     save_state(state, STATE_FILE)
 
     # Si l'ADR est approuvé, générer le fichier final
@@ -101,6 +101,3 @@ def main(input_file: str):
             f.write(body)
 
         print(f"ADR_FILE=docs/adr/{filename}")
-
-if __name__ == "__main__":
-    main(sys.argv[1])
