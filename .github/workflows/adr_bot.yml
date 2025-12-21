@@ -1,0 +1,96 @@
+name: ADR Bot
+
+on:
+  discussion_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  discussions: write
+
+jobs:
+  adr:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Fetch discussion comments
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const comments = await github.paginate(
+              github.rest.discussions.listComments,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                discussion_number: context.payload.discussion.number
+              }
+            );
+
+            const enriched = [];
+            for (const c of comments) {
+              const perm = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username: c.user.login
+              });
+
+              enriched.push({
+                body: c.body,
+                author: c.user.login,
+                author_role: perm.data.permission.toUpperCase(),
+                created_at: c.created_at
+              });
+            }
+
+            require("fs").writeFileSync(
+              "input.json",
+              JSON.stringify({ meta: {}, comments: enriched }, null, 2)
+            );
+
+      - name: Run ADR bot
+        run: |
+          python adr_bot/main.py input.json
+
+      - name: Post bot feedback
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require("fs");
+            if (!fs.existsSync("bot_output.json")) return;
+
+            const o = JSON.parse(fs.readFileSync("bot_output.json", "utf8"));
+            let body = "";
+
+            if (o.status === "error") {
+              body = `❌ **ADR command failed**\n\n${o.message}`;
+              if (o.details?.missing) {
+                body += `\n\n**Missing sections:**\n- ${o.details.missing.join("\n- ")}`;
+              }
+            } else {
+              body = `✅ **ADR approved**\n\nGenerated file: \`${o.adr_file}\``;
+            }
+
+            await github.rest.discussions.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              discussion_number: context.payload.discussion.number,
+              body
+            });
+
+      - name: Commit ADR
+        if: success()
+        run: |
+          git config user.name "adr-bot"
+          git config user.email "adr-bot@users.noreply.github.com"
+          git add docs/adr/*.md adr_state.json || true
+          git commit -m "docs(adr): publish ADR" || true
+          git push
