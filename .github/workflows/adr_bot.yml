@@ -79,7 +79,8 @@ jobs:
       - name: Run ADR bot
         run: |
           python scripts/adr_bot/main.py input.json
-      - name: Post ADR bot feedback
+
+      - name: Post bot feedback
         if: always()
         uses: actions/github-script@v7
         with:
