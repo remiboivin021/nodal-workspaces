@@ -446,7 +446,7 @@ jobs:
             }
             
             if (parsed.command === 'approve') {
-              if (${{ steps.generate.outcome }} === 'success')
+              if ${{ steps.generate.outcome }} === 'success'
                 {
                   // Marquer comme approuvé
                   await github.graphql(`
