@@ -143,6 +143,410 @@ jobs:
               categoryId: category.id,
               categoryName: category.name
             };
+      
+      - name: Create ADR discussion
+        if: fromJSON(steps.check_existing.outputs.result) && fromJSON(steps.analyze.outputs.result).isADR
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.ADR_BOT_TOKEN }}
+          script: |
+            const analysis = ${{ steps.analyze.outputs.result }};
+            const category = ${{ steps.get_category.outputs.result }};
+            
+            const discussionBody = `
+            # 🏛️ Architecture Decision Record Discussion
+            
+            **Related Issue**: #${analysis.issueNumber}
+            **Status**: 🟡 Under Discussion
+            
+            ---
+            
+            ## 📋 Original Issue Context
+            
+            ${analysis.issueBody}
+            
+            ---
+            
+            ## 📝 ADR Sections to Complete
+            
+            Please fill in the sections below through discussion comments. Use the section headers to organize your thoughts.
+            
+            ### \`## Context\`
+            
+            _What is the architectural problem or decision we need to make?_
+            
+            - Current situation
+            - Constraints and requirements  
+            - Why this decision is needed
+            
+            ---
+            
+            ### \`## Decision\`
+            
+            _What is the proposed architectural solution?_
+            
+            - Describe the decision in detail
+            - Technical approach
+            - Key components involved
+            
+            ---
+            
+            ### \`## Alternatives\`
+            
+            _What other options were considered?_
+            
+            - Alternative 1: Description + why rejected
+            - Alternative 2: Description + why rejected
+            
+            ---
+            
+            ### \`## Consequences\`
+            
+            _What are the impacts of this decision?_
+            
+            **Positive:**
+            - Benefit 1
+            - Benefit 2
+            
+            **Negative:**
+            - Trade-off 1
+            - Trade-off 2
+            
+            ---
+            
+            ### \`## Safety Impact\` (if applicable)
+            
+            - SIL Level: [None / SIL 1 / SIL 2 / SIL 3 / SIL 4]
+            - Related Requirements: SR-XXX, SR-YYY
+            - Safety justification
+            
+            ---
+            
+            ### \`## Implementation\`
+            
+            - Modules affected
+            - Migration strategy
+            - Timeline
+            
+            ---
+            
+            ## ✅ Validation Commands
+            
+            Once consensus is reached, use these commands to proceed:
+            
+            - \`/adr approve\` - Mark as approved and generate ADR document
+            - \`/adr reject\` - Reject this ADR (close without generating document)
+            - \`/adr status\` - Check current approval status
+            - \`/adr fill\`   - fill the section
+
+            **Note**: The ADR will only be generated when:
+            1. Required sections are filled (Context, Decision, Consequences)
+            2. Command \`/adr approve\` is issued by a maintainer
+            3. Discussion is closed
+            
+            ---
+            
+            ## 👥 Participants
+            
+            Tag relevant stakeholders for review: @maintainer1 @maintainer2
+            `;
+            
+            try {
+              console.log(`Creating discussion in category: ${category.categoryName}`);
+              
+              const result = await github.graphql(`
+                mutation($repositoryId: ID!, $categoryId: ID!, $title: String!, $body: String!) {
+                  createDiscussion(input: {
+                    repositoryId: $repositoryId,
+                    categoryId: $categoryId,
+                    title: $title,
+                    body: $body
+                  }) {
+                    discussion {
+                      id
+                      number
+                      url
+                    }
+                  }
+                }
+              `, {
+                repositoryId: context.payload.repository.node_id,
+                categoryId: category.categoryId,
+                title: `[ADR] ${analysis.issueTitle}`,
+                body: discussionBody
+              });
+              
+              const discussion = result.createDiscussion.discussion;
+              
+              // Commenter sur l'issue
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: analysis.issueNumber,
+                body: `🏛️ **ADR Discussion Created**
+            
+            This issue has been identified as requiring an Architecture Decision Record.
+            
+            👉 **Join the discussion**: ${discussion.url}
+            
+            Please participate in the discussion to:
+            - Fill in the ADR sections (Context, Decision, Consequences, etc.)
+            - Review and comment on the proposed architecture
+            - Reach consensus with the team
+            
+            Once ready, a maintainer can approve with \`/adr approve\` and close the discussion to generate the final ADR document.
+            
+            **Discussion #${discussion.number}** | **Category**: ${category.categoryName}`
+              });
+              
+              // Ajouter les labels
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: analysis.issueNumber,
+                labels: ['adr', 'needs-review']
+              });
+              
+              console.log(`✅ Discussion created: #${discussion.number}`);
+              
+            } catch (error) {
+              console.error('Error creating discussion:', error);
+              
+              // Si erreur, commenter sur l'issue pour expliquer
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: analysis.issueNumber,
+                body: `⚠️ **ADR Discussion Creation Failed**
+            
+            Could not automatically create a discussion for this ADR.
+            
+            **Possible reasons:**
+            - Discussions may not be enabled in this repository
+            - No discussion categories exist
+            
+            **To fix:**
+            1. Go to Settings → Features → Enable Discussions
+            2. Create a discussion category (e.g., "Architecture Decisions")
+            3. Re-run the workflow or manually create a discussion
+            
+            **Error**: ${error.message}`
+              });
+              
+              throw error;
+            }
+
+  handle-discussion-commands:
+    name: Handle ADR commands in discussion
+    runs-on: ubuntu-latest
+    if: github.event_name == 'discussion_comment'
+    
+    permissions:
+      discussions: write
+      issues: write
+      contents: read
+    
+    steps:
+      - name: Parse command
+        id: parse
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const comment = context.payload.comment;
+            const discussion = context.payload.discussion;
+            
+            // Détecter les commandes
+            const body = comment.body.toLowerCase();
+            let command = null;
+            
+            if (body.includes('/adr approve')) {
+              command = 'approve';
+            } else if (body.includes('/adr reject')) {
+              command = 'reject';
+            } else if (body.includes('/adr status')) {
+              command = 'status';
+            }
+            
+            if (!command) {
+              console.log('No ADR command found in comment');
+              return { hasCommand: false };
+            }
+            
+            // Vérifier si l'auteur est un maintainer
+            const author = comment.user.login;
+            const { data: permissions } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              username: author
+            });
+            
+            const isMaintainer = ['admin', 'write'].includes(permissions.permission);
+            
+            console.log(`Command: ${command} by ${author} (maintainer: ${isMaintainer})`);
+            
+            return {
+              hasCommand: true,
+              command: command,
+              isMaintainer: isMaintainer,
+              author: author,
+              discussionNumber: discussion.number,
+              discussionId: discussion.node_id
+            };
+      
+      - name: Execute command
+        if: fromJSON(steps.parse.outputs.result).hasCommand
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const parsed = ${{ steps.parse.outputs.result }};
+            const generate_status = ${{ steps.generate.outcome }}
+            if (parsed.command === 'status') {
+              // Afficher le statut actuel
+              await github.graphql(`
+                mutation($discussionId: ID!, $body: String!) {
+                  addDiscussionComment(input: {
+                    discussionId: $discussionId,
+                    body: $body
+                  }) {
+                    comment { id }
+                  }
+                }
+              `, {
+                discussionId: parsed.discussionId,
+                body: `📊 **ADR Status**
+            
+            - **Discussion**: #${parsed.discussionNumber}
+            - **Current Status**: 🟡 Under Review
+            - **Approval**: Pending
+            
+            To approve this ADR, use \`/adr approve\` and then close the discussion.`
+              });
+              return;
+            }
+            
+            if (!parsed.isMaintainer) {
+              await github.graphql(`
+                mutation($discussionId: ID!, $body: String!) {
+                  addDiscussionComment(input: {
+                    discussionId: $discussionId,
+                    body: $body
+                  }) {
+                    comment { id }
+                  }
+                }
+              `, {
+                discussionId: parsed.discussionId,
+                body: `⚠️ **Permission Denied**
+            
+            @${parsed.author}, only maintainers can use \`/adr ${parsed.command}\`.
+            
+            Please ask a maintainer to approve this ADR.`
+              });
+              return;
+            }
+            
+            if (parsed.command === 'approve') {
+                // Marquer comme approuvé
+                await github.graphql(`
+                  mutation($discussionId: ID!, $body: String!) {
+                    addDiscussionComment(input: {
+                      discussionId: $discussionId,
+                      body: $body
+                    }) {
+                      comment { id }
+                    }
+                  }
+                `, {
+                  discussionId: parsed.discussionId,
+                  body: `✅ **ADR Approved by @${parsed.author}**
+              
+              This architectural decision has been approved.
+              
+              **Next step**: Close this discussion to automatically generate the ADR document.
+              
+              The document will be committed to \`docs/governance/adr/\` and linked back to the original issue.`
+                }
+              });
+
+            } else if (parsed.command === 'reject') {
+              // Rejeter l'ADR
+              await github.graphql(`
+                mutation($discussionId: ID!, $body: String!) {
+                  addDiscussionComment(input: {
+                    discussionId: $discussionId,
+                    body: $body
+                  }) {
+                    comment { id }
+                  }
+                }
+              `, {
+                discussionId: parsed.discussionId,
+                body: `❌ **ADR Rejected by @${parsed.author}**
+            
+            This architectural decision has been rejected.
+            
+            You can close this discussion. No ADR document will be generated.`
+              });
+            }
+
+  generate-adr-on-close:
+    name: Generate ADR when discussion closes
+    runs-on: ubuntu-latest
+    if: github.event_name == 'discussion' && github.event.action == 'closed'
+    
+    permissions:
+      contents: write
+      discussions: write
+      issues: write
+    
+    steps:
+      # - name: Check if approved
+      #   id: check_approval
+      #   uses: actions/github-script@v7
+      #   with:
+      #     script: |
+      #       const discussion = context.payload.discussion;
+            
+      #       // Récupérer tous les commentaires via GraphQL
+      #       const result = await github.graphql(`
+      #         query($owner: String!, $repo: String!, $number: Int!) {
+      #           repository(owner: $owner, name: $repo) {
+      #             discussion(number: $number) {
+      #               comments(first: 100) {
+      #                 nodes {
+      #                   body
+      #                   author { login }
+      #                 }
+      #               }
+      #             }
+      #           }
+      #         }
+      #       `, {
+      #         owner: context.repo.owner,
+      #         repo: context.repo.repo,
+      #         number: discussion.number
+      #       });
+            
+      #       const comments = result.repository.discussion.comments.nodes;
+            
+      #       // Chercher une approbation
+      #       const hasApproval = comments.some(c => 
+      #         c.body.includes('/adr approve') || 
+      #         c.body.includes('✅ **ADR Approved')
+      #       );
+            
+      #       // Chercher un rejet
+      #       const hasRejection = comments.some(c => 
+      #         c.body.includes('/adr reject') ||
+      #         c.body.includes('❌ **ADR Rejected')
+      #       );
+            
+      #       console.log(`Discussion #${discussion.number}: approved=${hasApproval}, rejected=${hasRejection}`);
+            
+      #       return {
+      #         shouldGenerate: hasApproval && !hasRejection,
+      #         discussionNumber: discussion.number
+      #       };
 
       - name: Checkout repository
         uses: actions/checkout@v4
