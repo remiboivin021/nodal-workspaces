@@ -217,4 +217,235 @@ jobs:
             try {
               console.log(`Creating discussion in category: ${category.categoryName}`);
               
-              const result = await github
+              const result = await github.graphql(`
+                mutation($repositoryId: ID!, $categoryId: ID!, $title: String!, $body: String!) {
+                  createDiscussion(input: {
+                    repositoryId: $repositoryId,
+                    categoryId: $categoryId,
+                    title: $title,
+                    body: $body
+                  }) {
+                    discussion {
+                      id
+                      number
+                      url
+                    }
+                  }
+                }
+              `, {
+                repositoryId: context.payload.repository.node_id,
+                categoryId: category.categoryId,
+                title: `[ADR] ${analysis.issueTitle}`,
+                body: discussionBody
+              });
+              
+              const discussion = result.createDiscussion.discussion;
+              
+              // Commenter sur l'issue
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: analysis.issueNumber,
+                body: `🏛️ **ADR Discussion Created**
+            
+            This issue has been identified as requiring an Architecture Decision Record.
+            
+            👉 **Join the discussion**: ${discussion.url}
+            
+            Please participate in the discussion to:
+            - Fill in the ADR sections using \`/adr fill <section>\` commands
+            - Use \`/adr show\` to preview the current state
+            - Review and comment on the proposed architecture
+            - Reach consensus with the team
+            
+            Once ready, a maintainer can approve with \`/adr approve\` to generate the final ADR document.
+            
+            **Discussion #${discussion.number}** | **Category**: ${category.categoryName}`
+              });
+              
+              // Ajouter les labels
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: analysis.issueNumber,
+                labels: ['adr', 'needs-review']
+              });
+              
+              console.log(`✅ Discussion created: #${discussion.number}`);
+              
+            } catch (error) {
+              console.error('Error creating discussion:', error);
+              
+              // Si erreur, commenter sur l'issue pour expliquer
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: analysis.issueNumber,
+                body: `⚠️ **ADR Discussion Creation Failed**
+            
+            Could not automatically create a discussion for this ADR.
+            
+            **Possible reasons:**
+            - Discussions may not be enabled in this repository
+            - No discussion categories exist
+            
+            **To fix:**
+            1. Go to Settings → Features → Enable Discussions
+            2. Create a discussion category (e.g., "Architecture Decisions")
+            3. Re-run the workflow or manually create a discussion
+            
+            **Error**: ${error.message}`
+              });
+              
+              throw error;
+            }
+
+  # Job 2: Traiter les commandes ADR dans les commentaires de discussion
+  process_adr_commands:
+    name: Process ADR Commands
+    runs-on: ubuntu-latest
+    if: github.event_name == 'discussion_comment'
+    
+    permissions:
+      contents: write
+      discussions: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Fetch discussion comments
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require("fs");
+
+            const discussionNumber = context.payload.discussion.number;
+
+            const query = `
+              query($owner: String!, $repo: String!, $number: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  discussion(number: $number) {
+                    comments(first: 100) {
+                      nodes {
+                        body
+                        createdAt
+                        author {
+                          login
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `;
+
+            const result = await github.graphql(query, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              number: discussionNumber
+            });
+
+            const comments = result.repository.discussion.comments.nodes;
+            const enriched = [];
+
+            for (const c of comments) {
+              let role = "BOT";
+
+              // Ignore les bots système
+              if (c.author && c.author.login && c.author.login !== "github-actions") {
+                try {
+                  const perm = await github.rest.repos.getCollaboratorPermissionLevel({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    username: c.author.login
+                  });
+                  role = perm.data.permission.toUpperCase();
+                } catch (err) {
+                  console.log(`⚠️ Permission lookup failed for ${c.author.login}, defaulting to READ`);
+                  role = "READ";
+                }
+              }
+
+              enriched.push({
+                body: c.body,
+                author: c.author?.login ?? "unknown",
+                author_role: role,
+                created_at: c.createdAt
+              });
+            }
+
+            const payload = {
+              meta: {
+                discussion_number: discussionNumber,
+                discussion_url: context.payload.discussion.html_url,
+                title: context.payload.discussion.title
+              },
+              comments: enriched
+            };
+
+            fs.writeFileSync("input.json", JSON.stringify(payload, null, 2));
+            console.log(`✅ Saved ${enriched.length} comments to input.json`);
+
+      - name: Run ADR bot
+        run: |
+          python scripts/adr_bot/main.py input.json
+
+      - name: Post ADR bot feedback
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require("fs");
+            if (!fs.existsSync("bot_output.json")) {
+              console.log("No bot output to post");
+              return;
+            }
+
+            const output = JSON.parse(fs.readFileSync("bot_output.json", "utf8"));
+
+            let body = "";
+            if (output.status === "error") {
+              body = `❌ **ADR command failed**\n\n${output.message}`;
+              if (output.details?.missing) {
+                body += `\n\n**Missing required sections:**\n- ${output.details.missing.join("\n- ")}`;
+              }
+            } else if (output.status === "show") {
+              body = `📋 **ADR Content**\n\n${output.content}`;
+            } else if (output.status === "success") {
+              body = `✅ **ADR approved**\n\nGenerated file: \`${output.adr_file}\``;
+            }
+
+            const mutation = `
+              mutation($discussionId: ID!, $body: String!) {
+                addDiscussionComment(input: {
+                  discussionId: $discussionId,
+                  body: $body
+                }) {
+                  comment {
+                    id
+                  }
+                }
+              }
+            `;
+
+            await github.graphql(mutation, {
+              discussionId: context.payload.discussion.node_id,
+              body
+            });
+
+            console.log("ADR bot feedback posted");
+
+      - name: Commit ADR
+        if: success()
+        run: |
+          git config user.name "adr-bot"
+          git config user.email "adr-bot@users.noreply.github.com"
+          git add docs/adr/*.md adr_state.json || true
+          git commit -m "docs(adr): publish ADR" || true
+          git push
