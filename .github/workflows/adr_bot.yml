@@ -79,34 +79,49 @@ jobs:
       - name: Run ADR bot
         run: |
           python scripts/adr_bot/main.py input.json
-
-      - name: Post bot feedback
+      - name: Post ADR bot feedback
         if: always()
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require("fs");
-            if (!fs.existsSync("bot_output.json")) return;
-
-            const o = JSON.parse(fs.readFileSync("bot_output.json", "utf8"));
-            let body = "";
-
-            if (o.status === "error") {
-              body = `❌ **ADR command failed**\n\n${o.message}`;
-              if (o.details?.missing) {
-                body += `\n\n**Missing sections:**\n- ${o.details.missing.join("\n- ")}`;
-              }
-            } else {
-              body = `✅ **ADR approved**\n\nGenerated file: \`${o.adr_file}\``;
+            if (!fs.existsSync("bot_output.json")) {
+              console.log("No bot output to post");
+              return;
             }
 
-            await github.rest.discussions.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              discussion_number: context.payload.discussion.number,
+            const output = JSON.parse(fs.readFileSync("bot_output.json", "utf8"));
+
+            let body = "";
+            if (output.status === "error") {
+              body = `❌ **ADR command failed**\n\n${output.message}`;
+              if (output.details?.missing) {
+                body += `\n\n**Missing required sections:**\n- ${output.details.missing.join("\n- ")}`;
+              }
+            } else {
+              body = `✅ **ADR approved**\n\nGenerated file: \`${output.adr_file}\``;
+            }
+
+            const mutation = `
+              mutation($discussionId: ID!, $body: String!) {
+                addDiscussionComment(input: {
+                  discussionId: $discussionId,
+                  body: $body
+                }) {
+                  comment {
+                    id
+                  }
+                }
+              }
+            `;
+
+            await github.graphql(mutation, {
+              discussionId: context.payload.discussion.node_id,
               body
             });
+
+            console.log("ADR bot feedback posted");
 
       - name: Commit ADR
         if: success()
