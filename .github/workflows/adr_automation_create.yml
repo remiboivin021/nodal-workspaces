@@ -569,6 +569,7 @@ jobs:
         if: fromJSON(steps.check_approval.outputs.result).shouldGenerate
         id: generate
         run: |
+          touch input.json &&
           python scripts/adr_bot/main.py input.json
 
       # - name: Generate ADR document
