@@ -33,6 +33,58 @@ def bot_success(message: str, adr_file: str = None):
         json.dump(payload, f, indent=2)
 
 
+def bot_show(content: str):
+    """Génère une sortie spéciale pour afficher le contenu de l'ADR"""
+    payload = {
+        "status": "show",
+        "content": content
+    }
+    with open(BOT_OUTPUT, "w") as f:
+        json.dump(payload, f, indent=2)
+
+
+def format_section_content(state: dict, section: str = None) -> str:
+    """Formate le contenu d'une ou plusieurs sections pour affichage"""
+    output = []
+    
+    if section:
+        # Afficher une section spécifique
+        section_data = state["sections"].get(section)
+        if not section_data:
+            return f"⚠️ Section '{section}' non trouvée"
+        
+        content = section_data["content"].strip()
+        if not content:
+            output.append(f"## {section}\n\n*Section vide*")
+        else:
+            output.append(f"## {section}\n\n{content}")
+    else:
+        # Afficher toutes les sections
+        output.append("# État actuel de l'ADR\n")
+        output.append(f"**Statut:** {state['state']['status']}\n")
+        
+        has_content = False
+        for section_name, section_data in state["sections"].items():
+            content = section_data["content"].strip()
+            if content:
+                has_content = True
+                required = "✅ *requis*" if section_name in REQUIRED_SECTIONS else ""
+                output.append(f"## {section_name} {required}\n\n{content}\n")
+        
+        if not has_content:
+            output.append("\n*Aucune section n'a encore été remplie*")
+        else:
+            # Afficher les sections manquantes requises
+            missing_required = [
+                s for s in REQUIRED_SECTIONS 
+                if not state["sections"][s]["content"].strip()
+            ]
+            if missing_required:
+                output.append(f"\n⚠️ **Sections requises manquantes:** {', '.join(missing_required)}")
+    
+    return "\n".join(output)
+
+
 def adr_filename_from_state(state: dict) -> str:
     approved_at = state["state"].get("approved_at")
     if approved_at:
@@ -55,6 +107,8 @@ def main(input_file: str):
         state = create_empty_state(meta)
 
     approve_requested = False
+    show_requested = False
+    show_section = None
     approver = None
     approve_time = None
 
@@ -84,6 +138,11 @@ def main(input_file: str):
                 cur + "\n\n" + content.strip() if cur else content.strip()
             )
 
+        elif action == "show":
+            # La commande show doit être la dernière action traitée
+            show_requested = True
+            show_section = section
+
         elif action == "approve":
             approve_requested = True
             approver = c["author"]
@@ -94,6 +153,12 @@ def main(input_file: str):
             save_state(state, STATE_FILE)
             bot_success("ADR rejected")
             return
+
+    if show_requested:
+        formatted_content = format_section_content(state, show_section)
+        bot_show(formatted_content)
+        save_state(state, STATE_FILE)
+        return
 
     if approve_requested:
         non_empty = [
