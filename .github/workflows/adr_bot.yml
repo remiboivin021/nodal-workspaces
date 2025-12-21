@@ -24,6 +24,8 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
+            const fs = require("fs");
+
             const discussionNumber = context.payload.discussion.number;
 
             const query = `
@@ -51,37 +53,46 @@ jobs:
             });
 
             const comments = result.repository.discussion.comments.nodes;
-
             const enriched = [];
 
-            let role = "BOT";
+            for (const c of comments) {
+              let role = "BOT";
 
-            if (c.author.login !== "github-actions") {
-              try {
-                const perm = await github.rest.repos.getCollaboratorPermissionLevel({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  username: c.author.login
-                });
-                role = perm.data.permission.toUpperCase();
-              } catch (e) {
-                console.log(`⚠️ Unable to get role for ${c.author.login}, defaulting to READ`);
-                role = "READ";
+              // Ignore les bots système
+              if (c.author && c.author.login && c.author.login !== "github-actions") {
+                try {
+                  const perm = await github.rest.repos.getCollaboratorPermissionLevel({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    username: c.author.login
+                  });
+                  role = perm.data.permission.toUpperCase();
+                } catch (err) {
+                  console.log(`⚠️ Permission lookup failed for ${c.author.login}, defaulting to READ`);
+                  role = "READ";
+                }
               }
+
+              enriched.push({
+                body: c.body,
+                author: c.author?.login ?? "unknown",
+                author_role: role,
+                created_at: c.createdAt
+              });
             }
 
-            enriched.push({
-              body: c.body,
-              author: c.author.login,
-              author_role: role,
-              created_at: c.createdAt
-            });
-            require("fs").writeFileSync(
-              "input.json",
-              JSON.stringify({ meta: {}, comments: enriched }, null, 2)
-            );
+            const payload = {
+              meta: {
+                discussion_number: discussionNumber,
+                discussion_url: context.payload.discussion.html_url,
+                title: context.payload.discussion.title
+              },
+              comments: enriched
+            };
 
-            console.log(`Fetched ${enriched.length} discussion comments`);
+            fs.writeFileSync("input.json", JSON.stringify(payload, null, 2));
+            console.log(`✅ Saved ${enriched.length} comments to input.json`);
+
 
       - name: Run ADR bot
         run: |
