@@ -3,6 +3,7 @@ from enum import Enum
 
 class AdrStatus(str, Enum):
     DRAFT = "DRAFT"
-    APPROVED = "APPROVED"
+    PROPOSED = "PROPOSED"
+    ACCEPTED = "ACCEPTED"
     REJECTED = "REJECTED"
     SUPERSEDED = "SUPERSEDED"
